@@ -7,8 +7,10 @@ package null
 import (
 	"bytes"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"reflect"
 )
 
 // nullBytes is a JSON null literal
@@ -16,9 +18,7 @@ var nullBytes = []byte("null")
 
 // String is a nullable string. It supports SQL and JSON serialization.
 // It will marshal to null if null. Blank string input will be considered null.
-type String struct {
-	sql.NullString
-}
+type String sql.NullString
 
 // StringFrom creates a new String that will never be blank.
 func StringFrom(s string) String {
@@ -44,10 +44,8 @@ func (s String) ValueOrZero() string {
 // NewString creates a new String
 func NewString(s string, valid bool) String {
 	return String{
-		NullString: sql.NullString{
-			String: s,
-			Valid:  valid,
-		},
+		String: s,
+		Valid:  valid,
 	}
 }
 
@@ -115,4 +113,35 @@ func (s String) IsZero() bool {
 // Equal returns true if both strings have the same value or are both null.
 func (s String) Equal(other String) bool {
 	return s.Valid == other.Valid && (!s.Valid || s.String == other.String)
+}
+
+// Scan implements the driver Scanner interface.
+func (s *String) Scan(value interface{}) error {
+
+	var ns sql.NullString
+
+	if err := ns.Scan(value); err != nil {
+		return err
+	}
+
+	// if nil then make Valid false
+	if reflect.TypeOf(value) == nil {
+		*s = String{String: ns.String, Valid: false}
+	} else {
+		*s = String{String: ns.String, Valid: true}
+	}
+
+	return nil
+
+}
+
+// Value implements the driver Valuer interface.
+func (s String) Value() (driver.Value, error) {
+
+	if !s.Valid {
+		return nil, nil
+	}
+
+	return s.String, nil
+
 }
