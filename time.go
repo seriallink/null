@@ -6,14 +6,13 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 )
 
 // Time is a nullable time.Time. It supports SQL and JSON serialization.
 // It will marshal to null if null.
-type Time struct {
-	sql.NullTime
-}
+type Time sql.NullTime
 
 // Value implements the driver Valuer interface.
 func (t Time) Value() (driver.Value, error) {
@@ -26,10 +25,8 @@ func (t Time) Value() (driver.Value, error) {
 // NewTime creates a new Time.
 func NewTime(t time.Time, valid bool) Time {
 	return Time{
-		NullTime: sql.NullTime{
-			Time:  t,
-			Valid: valid,
-		},
+		Time:  t,
+		Valid: valid,
 	}
 }
 
@@ -137,4 +134,24 @@ func (t Time) Equal(other Time) bool {
 // have a different monotonic clock reading.
 func (t Time) ExactEqual(other Time) bool {
 	return t.Valid == other.Valid && (!t.Valid || t.Time == other.Time)
+}
+
+// Scan implements the driver Scanner interface.
+func (t *Time) Scan(value interface{}) error {
+
+	var nt sql.NullTime
+
+	if err := nt.Scan(value); err != nil {
+		return err
+	}
+
+	// if nil then make Valid false
+	if reflect.TypeOf(value) == nil {
+		*t = Time{Time: nt.Time, Valid: false}
+	} else {
+		*t = Time{Time: nt.Time, Valid: true}
+	}
+
+	return nil
+
 }
